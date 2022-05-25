@@ -154,3 +154,12 @@ func TestBoardGetValidMoves(t *testing.T) {
 		}
 	}
 }
+
+func TestBoardCopy(t *testing.T) {
+	board := NewBoard()
+	copied := board.copy()
+	copied.makeMove(5)
+	if reflect.DeepEqual(board.state, copied.state) {
+		t.Error("Copy did not create an independent state")
+	}
+}

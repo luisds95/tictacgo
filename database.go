@@ -40,6 +40,7 @@ func (db *MapDB) read() error {
 }
 
 func (db *MapDB) get(board Board) map[string]float64 {
+
 	return db.data[board.String()]
 }
 
