@@ -2,6 +2,9 @@ package tictacgo
 
 import (
 	"fmt"
+	"time"
+
+	"strconv"
 
 	"golang.org/x/exp/slices"
 )
@@ -31,24 +34,44 @@ func (player HumanPlayer) getAction(board Board) int {
 }
 
 type ExhaustiveSearchPlayer struct {
-	number     int
-	winOutcome GameOutcome
-	rewardWin  float64
-	rewardDraw float64
-	rewardLose float64
-	database   Database
+	number          int
+	winOutcome      GameOutcome
+	rewardWin       float64
+	rewardDraw      float64
+	rewardLose      float64
+	database        Database
+	isTraining      bool
+	commitFrequency int
 }
 
 func NewExhaustiveSearchPlayer(number int, database Database) ExhaustiveSearchPlayer {
 	winOutcome := intToGameOutcome(number)
 	return ExhaustiveSearchPlayer{
-		number:     number,
-		winOutcome: winOutcome,
-		rewardWin:  1,
-		rewardDraw: 0,
-		rewardLose: -1,
-		database:   database,
+		number:          number,
+		winOutcome:      winOutcome,
+		rewardWin:       1,
+		rewardDraw:      0,
+		rewardLose:      -1,
+		database:        database,
+		isTraining:      false,
+		commitFrequency: 1000,
 	}
+}
+
+func (player *ExhaustiveSearchPlayer) train() {
+	initialTime := time.Now()
+	fmt.Println("Starting training at", initialTime)
+
+	player.isTraining = true
+
+	board := NewBoard()
+	player.evaluateMoves(board)
+	player.database.commit()
+
+	player.isTraining = false
+
+	finalTime := time.Now()
+	fmt.Println("Training finished! It took", finalTime.Sub(initialTime))
 }
 
 func (player ExhaustiveSearchPlayer) getAction(board Board) int {
@@ -57,11 +80,10 @@ func (player ExhaustiveSearchPlayer) getAction(board Board) int {
 		values = player.evaluateMoves(board)
 	}
 
-	if board.nextPlayer() == 1 {
-		return getMaxActionValue(values)
-	} else {
-		return getMinActionValue(values)
-	}
+	shouldMax := board.nextPlayer() == player.number
+	bestAction, _ := getBestActionFromValues(values, shouldMax)
+
+	return bestAction
 }
 
 func (player ExhaustiveSearchPlayer) evaluateMoves(board Board) map[string]float64 {
@@ -73,7 +95,10 @@ func (player ExhaustiveSearchPlayer) evaluateMoves(board Board) map[string]float
 		strMove := fmt.Sprint(move)
 		switch outcome {
 		case NotFinished:
-			fmt.Println(NotFinished)
+			innerValues := player.evaluateMoves(newBoard)
+			shouldMax := newBoard.nextPlayer() == player.number
+			_, bestValue := getBestActionFromValues(innerValues, shouldMax)
+			values[strMove] = bestValue
 		case Draw:
 			values[strMove] = player.rewardDraw
 		case player.winOutcome:
@@ -82,4 +107,32 @@ func (player ExhaustiveSearchPlayer) evaluateMoves(board Board) map[string]float
 			values[strMove] = player.rewardLose
 		}
 	}
+
+	if player.isTraining {
+		player.database.update(board, values)
+		if player.database.size()%player.commitFrequency == 0 {
+			player.database.commit()
+		}
+	}
+
+	return values
+}
+
+func getBestActionFromValues(values map[string]float64, max bool) (int, float64) {
+	bestValue := 100.0
+	if max {
+		bestValue *= -1
+	}
+	bestAction := -1
+	for actionStr, value := range values {
+		action, err := strconv.Atoi(actionStr)
+		if err != nil {
+			panic(fmt.Sprintf("Unexpected error: %v", err))
+		}
+		if (max && value > bestValue) || (!max && value < bestValue) {
+			bestValue = value
+			bestAction = action
+		}
+	}
+	return bestAction, bestValue
 }

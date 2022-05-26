@@ -7,11 +7,12 @@ import (
 )
 
 type Database interface {
-	read()
+	read() error
 	get(board Board) map[string]float64
 	update(board Board, values map[string]float64)
 	commit()
 	exists(board Board) bool
+	size() int
 }
 
 type MapDB struct {
@@ -19,8 +20,8 @@ type MapDB struct {
 	source string
 }
 
-func NewMapDB(source string) MapDB {
-	return MapDB{source: source, data: make(map[string]map[string]float64)}
+func NewMapDB(source string) *MapDB {
+	return &MapDB{source: source, data: make(map[string]map[string]float64)}
 }
 
 func (db *MapDB) read() error {
@@ -39,7 +40,7 @@ func (db *MapDB) read() error {
 	return nil
 }
 
-func (db *MapDB) get(board Board) map[string]float64 {
+func (db MapDB) get(board Board) map[string]float64 {
 
 	return db.data[board.String()]
 }
@@ -48,12 +49,16 @@ func (db *MapDB) update(board Board, values map[string]float64) {
 	db.data[board.String()] = values
 }
 
-func (db *MapDB) commit() {
+func (db MapDB) commit() {
 	file, _ := json.Marshal(db.data)
 	_ = os.WriteFile(db.source, file, 0644)
 }
 
-func (db *MapDB) exists(board Board) bool {
+func (db MapDB) exists(board Board) bool {
 	_, ok := db.data[board.String()]
 	return ok
+}
+
+func (db MapDB) size() int {
+	return len(db.data)
 }
